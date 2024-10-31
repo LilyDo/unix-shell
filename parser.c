@@ -13,7 +13,7 @@ char *read_command_line()
   char *cmd = malloc(sizeof(char) * MAX_BUF_LEN);
 
   int again = 1;
-  char *linept;
+  char *linept; // pointer to the line buffer
 
   while (again)
   {
@@ -88,16 +88,96 @@ int parse_command_line(char *cmdline, char **cmds)
 - Tokenize the command string and store tokens in cmd_tokens.
 - Return the count of parsed tokens.
 */
+
 int parse_command(char *cmd, char **cmd_tokens)
 {
   int tok = 0;
   char *token = strtok(cmd, CMD_DELIMS);
+
   while (token != NULL)
   {
-    cmd_tokens[tok++] = token;
+    if (strchr(token, '*') || strchr(token, '?'))
+    {
+      int expanded_count = expand_wildcard_token(token, cmd_tokens, tok);
+      tok += expanded_count; // Update tok based on the number of expanded tokens
+    }
+    else
+    {
+      if (tok < MAX_BUF_LEN - 1) // Add the token as is
+        cmd_tokens[tok++] = strdup(token);
+    }
     token = strtok(NULL, CMD_DELIMS);
   }
+
   return tok;
+}
+
+// Utility function to expand a token with wildcards using glob
+int expand_wildcard_token(char *token, char **expanded_tokens, int start_index)
+{
+  glob_t glob_result;
+  memset(&glob_result, 0, sizeof(glob_result));
+
+  int return_value = glob(token, GLOB_TILDE, NULL, &glob_result);
+  int count = 0;
+
+  if (return_value == 0)
+  // Matches found, add each to the expanded_tokens array
+  {
+    for (size_t i = 0; i < glob_result.gl_pathc; ++i)
+    {
+      if (start_index + count < MAX_BUF_LEN - 1)
+      {
+        expanded_tokens[start_index + count] = strdup(glob_result.gl_pathv[i]);
+        count++;
+      }
+      else
+      {
+        fprintf(stderr, "Too many tokens\n");
+        break;
+      }
+    }
+  }
+  else
+  {
+    // If no matches, keep the original token
+    if (start_index + count < MAX_BUF_LEN - 1)
+    {
+      expanded_tokens[start_index + count] = strdup(token);
+      count++;
+    }
+  }
+
+  globfree(&glob_result);
+  return count;
+}
+
+/**
+ * Detects '<' , '>' and '>>' in a command, updating flags and indices for redirection.
+ */
+void check_redirect(char *cmd, int *input_redi, int *input_idx, int *output_redi, int *output_redi_type, int *output_idx)
+{
+  for (int i = 0; cmd[i]; i++)
+  {
+    if (cmd[i] == '<')
+    {
+      *input_redi = 1;
+      if (*input_idx == 0)
+        *input_idx = i;
+    }
+    if (cmd[i] == '>')
+    {
+      *output_redi = 1;
+      if (*output_redi_type == 0)
+        *output_redi_type = 1;
+      if (*output_idx == 0)
+        *output_idx = i;
+    }
+    if (cmd[i] == '>' && cmd[i + 1] == '>')
+    {
+      *output_redi_type = 2;
+    }
+  }
 }
 
 /*
@@ -109,30 +189,24 @@ int parse_command(char *cmd, char **cmd_tokens)
 int is_piping(char *cmd)
 {
   int i;
-  input_idx = ouput_idx = output_redi_type = piping = input_redi = output_redi = 0;
+  input_idx = 0;
+  output_idx = 0;
+  output_redi_type = 0;
+  piping = 0;
+  input_redi = 0;
+  output_redi = 0;
+
+  check_redirect(cmd, &input_redi, &input_idx, &output_redi, &output_redi_type, &output_idx);
+
   for (i = 0; cmd[i]; i++)
   {
     if (cmd[i] == '|')
     {
       piping = 1;
+      break;
     }
-    if (cmd[i] == '<')
-    {
-      input_redi = 1;
-      if (input_idx == 0)
-        input_idx = i;
-    }
-    if (cmd[i] == '>')
-    {
-      output_redi = 1;
-      if (output_redi_type == 0)
-        output_redi_type = 1;
-      if (ouput_idx == 0)
-        ouput_idx = i;
-    }
-    if (cmd[i] == '>' && cmd[i + 1] == '>')
-      output_redi_type = 2;
   }
+
   if (piping)
     return 1;
   else
@@ -140,59 +214,31 @@ int is_piping(char *cmd)
 }
 
 /*
-- Duplicate the command string to preserve the original.
-- Tokenize the command by the pipe symbol '|'.
-- Store each tokenized command segment in the pipe_cmds array.
-- Set pipe_num to the total number of pipe-separated segments.
-*/
-void parse_for_piping(char *cmd)
-{
-  char *copy = strdup(cmd);
-  char *token;
-  int tok = 0;
-  token = strtok(copy, "|");
-  while (token != NULL)
-  {
-    pipe_cmds[tok++] = token;
-    token = strtok(NULL, "|");
-  }
-  pipe_num = tok;
-}
-
-/*
-- Duplicate the command and initialize redirection flags and indices.
 - Detect input/output redirection symbols and set flags.
 - Tokenize and set in_file and out_file for both input and output redirection.
 - Handle input redirection by extracting the input file name.
 - Handle output redirection by extracting the output file name.
 - Parse the command normally if no redirection is detected.
-- Return the count of command tokens.
+- Return the count of command tokens excluding the redirection file names.
 */
 int parse_for_redirect(char *cmd, char **cmd_tokens)
 {
-  char *copy = strdup(cmd);
-  input_idx = ouput_idx = output_redi_type = input_redi = output_redi = 0;
-  in_file = out_file = NULL;
-  int i, tok = 0;
-  for (i = 0; cmd[i]; i++)
-  {
-    if (cmd[i] == '<')
-    {
-      input_redi = 1;
-      if (input_idx == 0)
-        input_idx = i;
-    }
-    if (cmd[i] == '>')
-    {
-      output_redi = 1;
-      if (output_redi_type == 0)
-        output_redi_type = 1;
-      if (ouput_idx == 0)
-        ouput_idx = i;
-    }
-    if (cmd[i] == '>' && cmd[i + 1] == '>')
-      output_redi_type = 2;
-  }
+  input_idx = 0;
+  output_idx = 0;
+  output_redi_type = 0;
+  input_redi = 0;
+  output_redi = 0;
+  in_file = NULL;
+  out_file = NULL;
+  int i;
+  int tok = 0;
+
+  // Detect input/output redirection symbols and set flags.
+  check_redirect(cmd, &input_redi, &input_idx, &output_redi, &output_redi_type, &output_idx);
+
+  char *copy = strdup(cmd); // the cmd string to avoid modifying the original
+
+  // command with both input and output redirection
   if (input_redi == 1 && output_redi == 1)
   {
     char *token;
@@ -202,7 +248,9 @@ int parse_for_redirect(char *cmd, char **cmd_tokens)
       cmd_tokens[tok++] = strdup(token);
       token = strtok(NULL, "<> \t\n");
     }
-    if (input_idx < ouput_idx)
+
+    // check the order of the redirection and assign file names
+    if (input_idx < output_idx)
     {
       in_file = strdup(cmd_tokens[tok - 2]);
       out_file = strdup(cmd_tokens[tok - 1]);
@@ -217,60 +265,79 @@ int parse_for_redirect(char *cmd, char **cmd_tokens)
     return tok - 2;
   }
 
+  // command with input redirection
   if (input_redi == 1)
   {
     char *token;
     char *copy = strdup(cmd);
 
     char **input_redirect_cmds = malloc((sizeof(char) * MAX_BUF_LEN) * MAX_BUF_LEN);
+
+    // Tokenize with '<' and store tokens in input_redirect_cmds array
     token = strtok(copy, "<");
     while (token != NULL)
     {
       input_redirect_cmds[tok++] = token;
       token = strtok(NULL, "<");
     }
+
     copy = strdup(input_redirect_cmds[tok - 1]);
 
+    // tokenize to extract the input file name, ignoring other delimiters
     token = strtok(copy, "> |\t\n");
+
+    // assign file name
     in_file = strdup(token);
 
     tok = 0;
+
+    // Tokenize the first part of the command to extract command tokens and store in cmd_tokens array
     token = strtok(input_redirect_cmds[0], CMD_DELIMS);
+
     while (token != NULL)
     {
       cmd_tokens[tok++] = strdup(token);
       token = strtok(NULL, CMD_DELIMS);
     }
 
-    cmd_tokens[tok] = NULL;
+    cmd_tokens[tok] = NULL; // end of command tokens
 
     free(input_redirect_cmds);
   }
 
+  // command with output redirection
   if (output_redi == 1)
   {
     char *copy = strdup(cmd);
     char *token;
     char **output_redirect_cmds = malloc((sizeof(char) * MAX_BUF_LEN) * MAX_BUF_LEN);
+
+    // Determine the delimiter based on the type of output redirection
+    // Tokenize the using the appropriate delimiter
     if (output_redi_type == 1)
       token = strtok(copy, ">");
     else if (output_redi_type == 2)
       token = strtok(copy, ">>");
+
     while (token != NULL)
     {
-      output_redirect_cmds[tok++] = token;
+      output_redirect_cmds[tok++] = token; // store tokens in output_redirect_cmds array
+
+      // Continue tokenizing based on the redirection type
       if (output_redi_type == 1)
         token = strtok(NULL, ">");
       else if (output_redi_type == 2)
         token = strtok(NULL, ">>");
     }
 
+    // Duplicate last token, which contains the input file name
     copy = strdup(output_redirect_cmds[tok - 1]);
-    token = strtok(copy, "< |\t\n");
-    out_file = strdup(token);
+    token = strtok(copy, "< |\t\n"); // tokenize to extract the input file name, ignoring some delimiters
+    out_file = strdup(token);        // assign file name
 
     tok = 0;
     token = strtok(output_redirect_cmds[0], CMD_DELIMS);
+
     while (token != NULL)
     {
       cmd_tokens[tok++] = token;
@@ -279,9 +346,29 @@ int parse_for_redirect(char *cmd, char **cmd_tokens)
 
     free(output_redirect_cmds);
   }
-
+  // no redirection
   if (input_redi == 0 && output_redi == 0)
     return parse_command(strdup(cmd), cmd_tokens);
   else
-    return tok;
+    return tok; // Return command token count
+}
+
+/*
+- Duplicate the command string to preserve the original.
+- Tokenize the command by the pipe symbol '|'.
+- Store each tokenized command segment in the pipe_cmds array.
+- Set pipe_num to the total number of pipe-separated segments.
+*/
+void parse_for_piping(char *cmd)
+{
+  char *copy_cmd = strdup(cmd);
+  char *token;
+  int tok = 0;
+  token = strtok(copy_cmd, "|");
+  while (token != NULL)
+  {
+    pipe_cmds[tok++] = token;
+    token = strtok(NULL, "|");
+  }
+  pipe_num = tok;
 }

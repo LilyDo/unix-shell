@@ -1,5 +1,3 @@
-/********************************************** Fork a child process to execute a command with exec *********************************/
-
 #include "header.h"
 
 /*
@@ -14,37 +12,41 @@ int execute_command(char **cmd_tokens)
   pid = fork();
   if (pid < 0)
   {
-    perror("Child Proc. not created\n");
+    perror("Child Process not created\n");
     return -1;
   }
   else if (pid == 0)
   {
-    int fin, fout, ferr;
-    setpgid(pid, pid); /* Assign pgid of process equal to its pid */
+    int fin, fout;
+    setpgid(pid, pid); // Set the process group id to the process id
 
-    if (input_redi)
+    if (input_redi) // Handle input redirect
     {
       fin = open_input_file();
       if (fin == -1)
         _exit(-1);
     }
-    if (output_redi)
+
+    if (output_redi) // Handle output redirect
     {
       fout = open_output_file();
       if (fout == -1)
         _exit(-1);
     }
 
+    // Assign terminal control to process if it's not running in the background
     if (is_background == 0)
-      tcsetpgrp(shell, getpid()); /* Assign terminal to this process if it is not background */
+      tcsetpgrp(shell, getpid());
 
-    signal(SIGINT, SIG_DFL); /* Restore default signals in child process */
+    // Restore default signal handlers in the child process
+    signal(SIGINT, SIG_DFL);
     signal(SIGQUIT, SIG_DFL);
     signal(SIGTSTP, SIG_DFL);
     signal(SIGTTIN, SIG_DFL);
     signal(SIGTTOU, SIG_DFL);
     signal(SIGCHLD, SIG_DFL);
 
+    // Execute command
     int ret;
     if ((ret = execvp(cmd_tokens[0], cmd_tokens)) < 0)
     {
@@ -53,27 +55,32 @@ int execute_command(char **cmd_tokens)
     }
     _exit(0);
   }
+
   if (is_background == 0)
   {
-    tcsetpgrp(shell, pid); /* Make sure the parent also gives control to child */
+    // Assign terminal control to the child process
+    tcsetpgrp(shell, pid);
     add_process(pid, cmd_tokens[0]);
+
     int status;
     fgpid = pid;
-    waitpid(pid, &status, WUNTRACED); /* Wait for this process, return even if it has stopped without trace */
+    waitpid(pid, &status, WUNTRACED); // Wait for this process
 
+    // if the process was stopped by a signal
     if (!WIFSTOPPED(status))
-      remove_process(pid); /* returns true if the child process was stopped by delivery of a signal */
+      remove_process(pid);
 
     else
       fprintf(stderr, "\n%s with pid %d has stopped!\n", cmd_tokens[0], pid);
 
-    tcsetpgrp(shell, my_pgid); /* Give control of terminal back to the executable */
+    // Return terminal control to the shell
+    tcsetpgrp(shell, my_pgid);
+    return 0;
   }
   else
   {
-
-    printf("\[%d] %d\n", job_num, pid);
-    add_process(pid, cmd_tokens[0]);
+    printf("\[%d] %d\n", job_num, pid); // Print job information of background processes
+    add_process(pid, cmd_tokens[0]);    // Add proc. to the process list
     return 0;
   }
 }
@@ -124,12 +131,11 @@ void handle_normal_command(int tokens, char **cmd_tokens)
       if (found_cmd)
       {
         int j;
-
         char **cmd_tokens = malloc((sizeof(char) * MAX_BUF_LEN) * MAX_BUF_LEN);
+
         for (j = 0; j < MAX_BUF_LEN; j++)
-        {
           cmd_tokens[j] = NULL;
-        }
+
         parse_command(strdup(found_cmd), cmd_tokens);
         execute_command(cmd_tokens);
       }
@@ -163,41 +169,42 @@ void handle_normal_command(int tokens, char **cmd_tokens)
 - Close all pipe file descriptors after use.
 - Wait for foreground processes to complete and manage terminal control.
 */
-void handle_redirect_and_piping(char *cmd)
+void handle_piping_and_redirect(char *cmd)
 {
   int pid, pgid, fin, fout;
 
   pipe_num = 0;
 
-  parse_for_piping(cmd);
-
   int *pipes = (int *)malloc(sizeof(int) * (2 * (pipe_num - 1)));
 
   int i;
 
-  for (i = 0; i < 2 * pipe_num - 3; i += 2)
+  // Create the necessary pipes for inter-process communication
+  for (i = 0; i < 2 * pipe_num - 3; i += 2) // pipes creataion
   {
     if (pipe(pipes + i) < 0)
-    { /* Create required number of pipes, each a combination of input and output fds */
+    {
       perror("Pipe not opened!\n");
       return;
     }
   }
+
   int status, j;
   for (i = 0; i < pipe_num; i++)
   {
-    char **cmd_tokens = malloc((sizeof(char) * MAX_BUF_LEN) * MAX_BUF_LEN); /* array of command tokens */
-    int tokens = parse_for_redirect(strdup(pipe_cmds[i]), cmd_tokens);
+    char **cmd_tokens = malloc((sizeof(char) * MAX_BUF_LEN) * MAX_BUF_LEN); // Allocate memory for command tokens
+
+    int tokens = parse_for_redirect(strdup(pipe_cmds[i]), cmd_tokens); //
     is_background = 0;
     pid = fork();
     if (i < pipe_num - 1)
-      add_process(pid, cmd_tokens[0]);
+      add_process(pid, cmd_tokens[0]); // Add the process to the process list
 
     if (pid != 0)
     {
       if (i == 0)
         pgid = pid;
-      setpgid(pid, pgid); /* Assign pgid of process equal to pgid of first pipe command pid */
+      setpgid(pid, pgid); // Assign the process group ID to the current process
     }
     if (pid < 0)
     {
@@ -205,27 +212,32 @@ void handle_redirect_and_piping(char *cmd)
     }
     else if (pid == 0)
     {
-      signal(SIGINT, SIG_DFL); /* Restore default signals in child process */
+      // Restore default signals in child process
+      signal(SIGINT, SIG_DFL);
       signal(SIGQUIT, SIG_DFL);
       signal(SIGTSTP, SIG_DFL);
       signal(SIGTTIN, SIG_DFL);
       signal(SIGTTOU, SIG_DFL);
       signal(SIGCHLD, SIG_DFL);
 
+      // output redirection or pipe output
       if (output_redi)
         fout = open_output_file();
       else if (i < pipe_num - 1)
         dup2(pipes[2 * i + 1], 1);
 
+      // input redirection or pipe input
       if (input_redi)
         fin = open_input_file();
       else if (i > 0)
         dup2(pipes[2 * i - 2], 0);
 
+      // Close all pipe file descriptors in child process
       int j;
       for (j = 0; j < 2 * pipe_num - 2; j++)
         close(pipes[j]);
 
+      // Execute command
       if (execvp(cmd_tokens[0], cmd_tokens) < 0)
       {
         perror("Execvp error!\n");
@@ -234,24 +246,26 @@ void handle_redirect_and_piping(char *cmd)
     }
   }
 
+  // Close all pipe file descriptors in the parent process
   for (i = 0; i < 2 * pipe_num - 2; i++)
     close(pipes[i]);
 
   if (is_background == 0)
   {
-    tcsetpgrp(shell, pgid); /* Assign terminal to pg of the pipe commands */
+    // Assign terminal to the process group
+    tcsetpgrp(shell, pgid);
 
     for (i = 0; i < pipe_num; i++)
     {
 
+      // Wait for each process in the pipeline
       int cpid = waitpid(-pgid, &status, WUNTRACED);
-
-      /* Wait for this process, return even if it has stopped without trace */
 
       if (!WIFSTOPPED(status))
         remove_process(cpid);
     }
 
-    tcsetpgrp(shell, my_pgid); /* Give control of terminal back to the executable */
+    // Return control back to shell
+    tcsetpgrp(shell, my_pgid);
   }
 }

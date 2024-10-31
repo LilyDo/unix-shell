@@ -18,10 +18,13 @@ void update_cwd_relative(char *cwd)
   int i, j;
   for (i = 0; cwd[i] == base_dir[i] && cwd[i] != '\0' && base_dir[i] != '\0'; i++)
     ;
+
+  // If entire base_dir matches the start of cwd
   if (base_dir[i] == '\0')
   {
-    cwd[0] = '~';
-    for (j = 1; cwd[i] != '\0'; j++)
+    cwd[0] = '~'; // Replace the start of cwd with '~'
+
+    for (j = 1; cwd[i] != '\0'; j++) // Copy the remaining part of cwd after base_dir to the position after '~'
     {
       cwd[j] = cwd[i++];
     }
@@ -37,8 +40,8 @@ void handle_signal(int signum)
 {
   if (signum == SIGINT)
   {
-    signal(SIGINT, SIG_IGN);       /* For ignoring ctrl + c */
-    signal(SIGINT, handle_signal); /* For re-setting signal handler */
+    signal(SIGINT, SIG_IGN);       // ignore Ctrl+C
+    signal(SIGINT, handle_signal); // reset signal handler
   }
   else if (signum == SIGCHLD)
   { /* For handling signal from child processes */
@@ -71,35 +74,30 @@ Set process group ID
 Update the current directory relative to the home directory.
 */
 
-void init_shell()
+void setup()
 {
 
-  shell = STDERR_FILENO; /* FD for stderr */
+  shell = STDERR_FILENO; // FD for stderr
 
-  job_num = 0;
+  job_num = 0; //  Init job number counter to keep track of background or concurrent jobs
 
-  input_token_cmds = malloc((sizeof(char) * MAX_BUF_LEN) * MAX_BUF_LEN);
-  output_token_cmds = malloc((sizeof(char) * MAX_BUF_LEN) * MAX_BUF_LEN);
-
-  if (isatty(shell))
+  if (isatty(shell)) // Checks if the file descriptor refers to a terminal.
   {
-    while (tcgetpgrp(shell) != (shell_pgid = getpgrp())) /* / Ensure process group matches terminal's */
-      kill(shell_pgid, SIGTTIN);                         /* Send SIGTTIN to set terminal input for background processes */
+    // Ensure process group matches terminal's
+    // if not send SIGTTIN to stop the process until it can be attached to the terminal.
+    while (tcgetpgrp(shell) != (shell_pgid = getpgrp()))
+      kill(shell_pgid, SIGTTIN);
   }
-
-  signal(SIGINT, SIG_IGN); /* To ignore Ctrl c */
-
-  signal(SIGTSTP, SIG_IGN); /* To ignore Ctrl z */
-
-  signal(SIGQUIT, SIG_IGN); /* To ignore Ctrl \ */
-
-  signal(SIGTTIN, SIG_IGN); /* Ignore background processes */
-
-  signal(SIGTTOU, SIG_IGN);
 
   my_pid = my_pgid = getpid(); /* process group ID to match pid */
   setpgid(my_pid, my_pgid);
   tcsetpgrp(shell, my_pgid); /* Assign control of stderr to the process group */
+
+  signal(SIGQUIT, SIG_IGN); /* To ignore Ctrl+\ */
+  signal(SIGTSTP, SIG_IGN); // ignore Ctrl+Z
+  signal(SIGINT, SIG_IGN);  // ignore Ctrl+C
+  signal(SIGTTIN, SIG_IGN); // Ignore attempts to read from the terminal in the background.
+  signal(SIGTTOU, SIG_IGN); // Ignore attempts to write to the terminal in the background.
 
   get_home_dir();
   update_cwd_relative(cwd);

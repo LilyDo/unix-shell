@@ -1,10 +1,9 @@
-/***************************** Header & Macro *****************************************/
-
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <glob.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -13,20 +12,22 @@
 #define CMD_DELIMS " \t\n"
 #define MAX_HISTORY 10
 
-/********************************** Function ************************************/
+/* -------------------------------------------------------------------*/
 
-void init_shell();
+void setup();
 void handle_signal(int signum);
 
 char *read_command_line();
 int parse_command_line(char *cmd, char **cmds);
 int parse_command(char *cmd, char **cmd_tokens);
 void parse_for_piping(char *cmd);
+int expand_wildcard_token(char *token, char **expanded_tokens, int start_index);
 int parse_for_redirect(char *cmd, char **cmd_tokens);
 int execute_command(char **cmd_tokens);
+void process_input(char **cmds, int num_cmds);
 
 int is_piping(char *cmd);
-void handle_redirect_and_piping(char *cmd);
+void handle_piping_and_redirect(char *cmd);
 void handle_normal_command(int tokens, char **cmd_tokens);
 void add_process(int pid, char *name);
 void remove_process(int pid);
@@ -42,7 +43,7 @@ void add_to_history(char *cmd);
 void print_history();
 char *find_command_by_prefix(char *prefix);
 
-/******************************* Variable And Struct ******************************/
+/* -------------------------------------------------------------------*/
 
 struct process_info
 {
@@ -65,8 +66,6 @@ pid_t my_pid, my_pgid, fgpid;
 char *in_file;
 char *out_file;
 
-char **input_token_cmds;
-char **output_token_cmds;
 char **input_redirect_cmds;
 char **output_redirect_cmds;
 
@@ -74,4 +73,4 @@ int job_num;
 int shell, shell_pgid;
 int output_redi_type, pipe_num;
 int piping, input_redi, output_redi;
-int is_background, input_idx, ouput_idx;
+int is_background, input_idx, output_idx;
