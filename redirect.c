@@ -4,7 +4,7 @@
    Opens the specified input file for reading, duplicates its file descriptor
    to standard input, and returns the file descriptor. Prints an error if opening fails.
 */
-int open_input_file()
+int open_input_file(void)
 {
   int fd = open(in_file, O_RDONLY, S_IRWXU); // open in read-only mode
   if (fd < 0)
@@ -27,7 +27,7 @@ int open_input_file()
    Opens the output file for writing (truncate/append), redirects to stdout,
    and returns the file descriptor. Prints error if opening fails.
 */
-int open_output_file()
+int open_output_file(void)
 {
   int fd;
   if (output_redi_type == 1)

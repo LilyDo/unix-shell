@@ -14,17 +14,16 @@
 
 /* -------------------------------------------------------------------*/
 
-void setup();
+void setup(void);
 void handle_signal(int signum);
 
-char *read_command_line();
+char *read_command_line(void);
 int parse_command_line(char *cmd, char **cmds);
 int parse_command(char *cmd, char **cmd_tokens);
 void parse_for_piping(char *cmd);
 int expand_wildcard_token(char *token, char **expanded_tokens, int start_index);
 int parse_for_redirect(char *cmd, char **cmd_tokens);
 int execute_command(char **cmd_tokens);
-void process_input(char **cmds, int num_cmds);
 
 int is_piping(char *cmd);
 void handle_piping_and_redirect(char *cmd);
@@ -32,15 +31,15 @@ void handle_normal_command(int tokens, char **cmd_tokens);
 void add_process(int pid, char *name);
 void remove_process(int pid);
 
-int open_input_file();
-int open_output_file();
+int open_input_file(void);
+int open_output_file(void);
 
 void change_prompt(char *new_prompt);
 int cd(char **cmd_tokens, char *cwd, char *base_dir);
 void update_cwd_relative(char *cwd);
 void pwd(char **cmd_tokens);
 void add_to_history(char *cmd);
-void print_history();
+void print_history(void);
 char *find_command_by_prefix(char *prefix);
 
 /* -------------------------------------------------------------------*/

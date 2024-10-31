@@ -4,7 +4,7 @@
 Retrieves the current working directory and stores it in `base_dir`,
 then copies it to `cwd` for further use.
 */
-void get_home_dir()
+void get_home_dir(void)
 {
   getcwd(base_dir, MAX_BUF_LEN - 1);
   strcpy(cwd, base_dir);
@@ -74,7 +74,7 @@ Set process group ID
 Update the current directory relative to the home directory.
 */
 
-void setup()
+void setup(void)
 {
 
   shell = STDERR_FILENO; // FD for stderr

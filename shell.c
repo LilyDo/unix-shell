@@ -13,7 +13,7 @@ char prompt[MAX_BUF_LEN] = "%";
  *    2.6 execute each command while managing piping, input/output redirection and background execution.
  */
 
-int main()
+int main(void)
 {
   setup();
 

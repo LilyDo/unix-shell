@@ -79,8 +79,8 @@ int execute_command(char **cmd_tokens)
   }
   else
   {
-    printf("\[%d] %d\n", job_num, pid); // Print job information of background processes
-    add_process(pid, cmd_tokens[0]);    // Add proc. to the process list
+    printf("\n[%d] %d\n", job_num, pid); // Print job information of background processes
+    add_process(pid, cmd_tokens[0]);     // Add proc. to the process list
     return 0;
   }
 }
@@ -171,13 +171,15 @@ void handle_normal_command(int tokens, char **cmd_tokens)
 */
 void handle_piping_and_redirect(char *cmd)
 {
-  int pid, pgid, fin, fout;
-
   pipe_num = 0;
+  int pid, pgid, fin, fout;
+  int i, status;
 
-  int *pipes = (int *)malloc(sizeof(int) * (2 * (pipe_num - 1)));
+  parse_for_piping(cmd);
 
-  int i;
+  size_t num_pipes = (size_t)(2 * (pipe_num - 1));
+
+  int *pipes = (int *)malloc(sizeof(int) * num_pipes);
 
   // Create the necessary pipes for inter-process communication
   for (i = 0; i < 2 * pipe_num - 3; i += 2) // pipes creataion
@@ -189,12 +191,13 @@ void handle_piping_and_redirect(char *cmd)
     }
   }
 
-  int status, j;
   for (i = 0; i < pipe_num; i++)
   {
     char **cmd_tokens = malloc((sizeof(char) * MAX_BUF_LEN) * MAX_BUF_LEN); // Allocate memory for command tokens
 
-    int tokens = parse_for_redirect(strdup(pipe_cmds[i]), cmd_tokens); //
+    parse_for_redirect(strdup(pipe_cmds[i]), cmd_tokens);
+    // int tokens = parse_for_redirect(strdup(pipe_cmds[i]), cmd_tokens);
+
     is_background = 0;
     pid = fork();
     if (i < pipe_num - 1)
@@ -222,13 +225,20 @@ void handle_piping_and_redirect(char *cmd)
 
       // output redirection or pipe output
       if (output_redi)
+      {
         fout = open_output_file();
+        printf("fout %d\n", fout);
+      }
       else if (i < pipe_num - 1)
         dup2(pipes[2 * i + 1], 1);
 
       // input redirection or pipe input
       if (input_redi)
+      {
         fin = open_input_file();
+        printf("fin %d\n", fin);
+      }
+
       else if (i > 0)
         dup2(pipes[2 * i - 2], 0);
 

@@ -74,7 +74,7 @@ void add_to_history(char *cmd)
 /*
    Prints the command history in order, starting from the oldest command.
 */
-void print_history()
+void print_history(void)
 {
   printf("\nCommand History:\n");
 
@@ -92,7 +92,7 @@ void print_history()
 */
 char *find_command_by_prefix(char *prefix)
 {
-  int prefix_len = strlen(prefix);
+  size_t prefix_len = strlen(prefix);
   for (int i = history_count - 1; i >= 0; i--)
   {
     int index = (history_index - 1 - i + MAX_HISTORY) % MAX_HISTORY;

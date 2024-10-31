@@ -7,9 +7,8 @@
 - Handle errors by freeing memory and exiting if reading fails.
 - Return the command string.
 */
-char *read_command_line()
+char *read_command_line(void)
 {
-  int len = 0, c;
   char *cmd = malloc(sizeof(char) * MAX_BUF_LEN);
 
   int again = 1;
@@ -230,7 +229,6 @@ int parse_for_redirect(char *cmd, char **cmd_tokens)
   output_redi = 0;
   in_file = NULL;
   out_file = NULL;
-  int i;
   int tok = 0;
 
   // Detect input/output redirection symbols and set flags.
